@@ -1,7 +1,8 @@
 """Tests for the AI Task Planner."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from agent.orchestrator.planner import TaskPlanner
 
@@ -73,8 +74,7 @@ async def test_planner_limits_steps():
         mock_llm.return_value = {
             "goal": "Huge task",
             "steps": [
-                {"id": i, "task": f"Step {i}", "tool": "shell"}
-                for i in range(20)
+                {"id": i, "task": f"Step {i}", "tool": "shell"} for i in range(20)
             ],
         }
 

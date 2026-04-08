@@ -1,7 +1,6 @@
 """Tests for file permission management."""
 
 import os
-import platform
 from pathlib import Path
 from unittest.mock import patch
 
@@ -24,14 +23,17 @@ class TestPathExpansion:
         """Test expansion of ~ to home directory."""
         result = _expand_path("~/Documents")
         assert "~" not in result
-        assert result.endswith("Documents") or result.endswith("Documents\\") or \
-               str(Path("~/Documents").expanduser()) in result
+        assert (
+            result.endswith("Documents")
+            or result.endswith("Documents\\")
+            or str(Path("~/Documents").expanduser()) in result
+        )
         # Should be an absolute path
         assert Path(result).is_absolute()
 
     def test_expand_absolute_path(self):
         """Test absolute paths stay absolute."""
-        if os.name == 'nt':  # Windows
+        if os.name == "nt":  # Windows
             # On Windows, /tmp/test becomes C:\\tmp\\test or similar
             result = _expand_path("/tmp/test")
             assert Path(result).is_absolute()
@@ -55,7 +57,7 @@ class TestPathParsing:
 
     def test_parse_single_path(self):
         """Test parsing single path."""
-        if os.name == 'nt':  # Windows
+        if os.name == "nt":  # Windows
             result = _parse_path_list("C:\\tmp")
             assert len(result) == 1
             assert Path(result[0]).is_absolute()
@@ -66,7 +68,7 @@ class TestPathParsing:
 
     def test_parse_multiple_paths(self):
         """Test parsing comma-separated paths."""
-        if os.name == 'nt':  # Windows
+        if os.name == "nt":  # Windows
             result = _parse_path_list("C:\\tmp,C:\\var,C:\\home")
             assert len(result) == 3
             assert all(Path(p).is_absolute() for p in result)
@@ -78,7 +80,7 @@ class TestPathParsing:
 
     def test_parse_paths_with_spaces(self):
         """Test parsing paths with spaces around commas."""
-        if os.name == 'nt':  # Windows
+        if os.name == "nt":  # Windows
             result = _parse_path_list(" C:\\tmp , C:\\var , C:\\home ")
             assert len(result) == 3
         else:  # Unix

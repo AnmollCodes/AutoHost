@@ -2,8 +2,8 @@
 
 import uuid
 
-import pytest
 import chromadb
+import pytest
 
 from agent.memory.memory_store import MemoryStore
 

@@ -1,7 +1,6 @@
 """Tests for the Codebase Analyzer tool."""
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
@@ -72,7 +71,7 @@ def test_repo_map_structure(mock_repo):
     analyze_codebase(mock_repo)
     map_path = Path(mock_repo) / "repo_map.json"
 
-    with open(map_path, "r", encoding="utf-8") as f:
+    with open(map_path, encoding="utf-8") as f:
         data = json.load(f)
 
     assert "main.py" in data["entry_points"]
@@ -86,7 +85,7 @@ def test_ignores_venv_and_pycache(mock_repo):
     analyze_codebase(mock_repo)
     map_path = Path(mock_repo) / "repo_map.json"
 
-    with open(map_path, "r", encoding="utf-8") as f:
+    with open(map_path, encoding="utf-8") as f:
         data = json.load(f)
 
     assert not any("venv" in p for p in data["files"])
@@ -110,6 +109,6 @@ def test_empty_directory():
         map_path = Path(tmpdir) / "repo_map.json"
         assert map_path.exists()
 
-        with open(map_path, "r", encoding="utf-8") as f:
+        with open(map_path, encoding="utf-8") as f:
             data = json.load(f)
         assert data["total_files"] == 0

@@ -1,6 +1,6 @@
 """Tests for the ReAct agent."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -37,8 +37,7 @@ class TestReActAgent:
     @pytest.mark.asyncio
     async def test_agent_executes_shell_command(self, agent):
         """Agent should execute shell commands when requested."""
-        import asyncio
-        
+
         responses = [
             {
                 "thought": "User wants to see files, I'll run ls",
@@ -51,16 +50,19 @@ class TestReActAgent:
                 "response": "Found 3 files in the directory",
             },
         ]
-        
+
         call_count = 0
-        
+
         async def mock_call_llm(*args, **kwargs):
             nonlocal call_count
             result = responses[call_count % len(responses)]
             call_count += 1
             return result
-        
-        with patch("agent.orchestrator.react_agent.call_llm_json_async", side_effect=mock_call_llm):
+
+        with patch(
+            "agent.orchestrator.react_agent.call_llm_json_async",
+            side_effect=mock_call_llm,
+        ):
             state = await agent.run("List files")
 
             assert state.status == "completed"
@@ -109,16 +111,19 @@ class TestReActAgent:
                 "response": "I encountered an issue but recovered",
             },
         ]
-        
+
         call_count = 0
-        
+
         async def mock_call_llm(*args, **kwargs):
             nonlocal call_count
             result = responses[call_count % len(responses)]
             call_count += 1
             return result
-        
-        with patch("agent.orchestrator.react_agent.call_llm_json_async", side_effect=mock_call_llm):
+
+        with patch(
+            "agent.orchestrator.react_agent.call_llm_json_async",
+            side_effect=mock_call_llm,
+        ):
             state = await agent.run("Do something impossible")
 
             # Should eventually complete (possibly with error handling)

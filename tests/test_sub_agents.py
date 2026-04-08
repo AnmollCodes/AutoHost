@@ -1,6 +1,6 @@
 """Tests for sub-agent parallel execution functionality."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -443,16 +443,19 @@ class TestSubAgentIntegration:
                 "summary": "Found Python and JavaScript results",
             },
         ]
-        
+
         call_count = 0
-        
+
         async def mock_call_llm(*args, **kwargs):
             nonlocal call_count
             result = responses[call_count % len(responses)]
             call_count += 1
             return result
-        
-        with patch("agent.orchestrator.react_agent.call_llm_json_async", side_effect=mock_call_llm):
+
+        with patch(
+            "agent.orchestrator.react_agent.call_llm_json_async",
+            side_effect=mock_call_llm,
+        ):
             state = await agent.run("Search for Python and JavaScript tutorials")
 
             # Should complete successfully even if parallel execution doesn't trigger
@@ -506,16 +509,19 @@ class TestSubAgentIntegration:
             },
             {"thought": "All done", "is_complete": True, "response": "Finished"},
         ]
-        
+
         call_count = 0
-        
+
         async def mock_call_llm(*args, **kwargs):
             nonlocal call_count
             result = responses[call_count % len(responses)]
             call_count += 1
             return result
-        
-        with patch("agent.orchestrator.react_agent.call_llm_json_async", side_effect=mock_call_llm):
+
+        with patch(
+            "agent.orchestrator.react_agent.call_llm_json_async",
+            side_effect=mock_call_llm,
+        ):
             state = await agent.run("Do parallel things")
 
         # Agent should complete successfully
