@@ -1,0 +1,32 @@
+{
+  "exclude": ["**/node_modules", "**/.git", ".venv", "**/__pycache__", "**/dist", "**/build", "**/.tox", "**/.eggs", "*.egg-info", "**/.mypy_cache", "**/.pytest_cache", "**/.ruff_cache", ".github", "**/CVS", "**/typeshed"],
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
+  "analysis": {
+    "extraPaths": ["${workspaceRoot}", "${workspaceRoot}/agent"],
+    "typeshedPath": "",
+    "useLibraryCodeForTypes": true,
+    "typeCheckingMode": "basic",
+    "diagnosticMode": "openFilesOnly"
+  },
+  "reportGeneralTypeIssues": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalSubscript": "warning",
+  "reportOptionalOperand": "warning",
+  "reportUnusedImport": "information",
+  "reportUnusedVariable": "information",
+  "reportUnusedClass": "information",
+  "reportUnusedFunction": "information",
+  "reportUnusedCallResult": "information",
+  "reportUnnecessaryIsInstance": "information",
+  "reportConstantRedefinition": "warning",
+  "reportInvalidTypeForm": "warning",
+  "reportMatchNotExhaustive": "warning",
+  "reportShadowedImports": "information",
+  "reportPrivateUsage": "warning",
+  "reportMissingTypeStubs": "warning",
+  "reportMissingImports": "warning",
+  "reportInconsistentConstructor": "warning",
+  "reportInconsistentMethodOverride": "warning"
+}
+
