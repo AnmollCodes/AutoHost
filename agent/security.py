@@ -144,10 +144,10 @@ def validate_path(
 
     # Check against sensitive paths (cross-platform comparison)
     resolved_str = str(resolved).lower().replace("\\", "/")
-    
+
     # Always check against Unix-style sensitive paths (even on Windows)
     unix_sensitive_paths = [p for p in SENSITIVE_PATHS if p.startswith("/")]
-    
+
     for sensitive in unix_sensitive_paths:
         sensitive_lower = sensitive.lower()
         # Direct match or prefix match for directories
@@ -157,12 +157,16 @@ def validate_path(
         ):
             logger.warning(f"Blocked access to sensitive path: {resolved}")
             raise PathTraversalError("Access denied: sensitive path")
-    
+
     # Also check home-based sensitive paths
     for sensitive in SENSITIVE_PATHS:
         if "~" in sensitive:
-            sensitive_expanded = str(Path(sensitive).expanduser().resolve()).lower().replace("\\", "/")
-            if resolved_str == sensitive_expanded or resolved_str.startswith(sensitive_expanded + "/"):
+            sensitive_expanded = (
+                str(Path(sensitive).expanduser().resolve()).lower().replace("\\", "/")
+            )
+            if resolved_str == sensitive_expanded or resolved_str.startswith(
+                sensitive_expanded + "/"
+            ):
                 logger.warning(f"Blocked access to sensitive path: {resolved}")
                 raise PathTraversalError("Access denied: sensitive path")
 

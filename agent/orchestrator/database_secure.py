@@ -10,16 +10,15 @@ from pathlib import Path
 from typing import Optional
 
 import structlog
-from sqlalchemy import create_engine, Column, String, DateTime, Text
+from sqlalchemy import Column, DateTime, String, Text, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import Session, sessionmaker
 
 logger = structlog.get_logger(__name__)
 
 # Database configuration
 DB_URL = os.environ.get(
-    "DATABASE_URL",
-    f"sqlite:///{Path.home()}/.autohost/autohost.db"
+    "DATABASE_URL", f"sqlite:///{Path.home()}/.autohost/autohost.db"
 )
 
 # Create engine with safety settings
@@ -27,7 +26,7 @@ engine = create_engine(
     DB_URL,
     echo=False,
     pool_pre_ping=True,  # Test connection before using
-    pool_recycle=3600,   # Recycle connections
+    pool_recycle=3600,  # Recycle connections
     # SQLite-specific settings
     connect_args={"check_same_thread": False} if "sqlite" in DB_URL else {},
 )
@@ -35,12 +34,13 @@ engine = create_engine(
 # Enable WAL mode for SQLite (better concurrency)
 if "sqlite" in DB_URL:
     from sqlalchemy import event
-    
+
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_conn, connection_record):
         cursor = dbapi_conn.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.close()
+
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -77,7 +77,9 @@ class TaskRecord(Base):
             "error": self.error,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "completed_at": self.completed_at.isoformat()
+            if self.completed_at
+            else None,
         }
 
 
@@ -133,7 +135,7 @@ class DatabaseManager:
     ) -> TaskRecord:
         """
         Create a new task (PARAMETERIZED - INJECTION SAFE).
-        
+
         Uses SQLAlchemy ORM, NOT raw SQL.
         All parameters are properly typed and escaped.
         """
@@ -169,7 +171,7 @@ class DatabaseManager:
     def get_task(task_id: str, user_id: str) -> Optional["TaskRecord"]:
         """
         Get task by ID (with user isolation).
-        
+
         Verifies task belongs to user before returning.
         """
         db = DatabaseManager.get_session()
@@ -199,7 +201,7 @@ class DatabaseManager:
     def list_tasks(user_id: str, limit: int = 100) -> list[TaskRecord]:
         """
         List all tasks for a user (with user isolation).
-        
+
         Only returns tasks belonging to the authenticated user.
         """
         db = DatabaseManager.get_session()
@@ -225,13 +227,13 @@ class DatabaseManager:
     def update_task(
         task_id: str,
         user_id: str,
-        state: Optional[str] = None,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
+        state: str | None = None,
+        output: str | None = None,
+        error: str | None = None,
     ) -> Optional["TaskRecord"]:
         """
         Update task (PARAMETERIZED UPDATE).
-        
+
         Uses SQLAlchemy for safe parameter substitution.
         """
         db = DatabaseManager.get_session()
@@ -285,7 +287,7 @@ class DatabaseManager:
     def delete_task(task_id: str, user_id: str) -> bool:
         """
         Delete task (with user ownership verification).
-        
+
         Only owners can delete their tasks.
         """
         db = DatabaseManager.get_session()
@@ -327,12 +329,12 @@ class DatabaseManager:
         action: str,
         resource: str,
         status: str,
-        details: Optional[str] = None,
-        ip_address: Optional[str] = None,
+        details: str | None = None,
+        ip_address: str | None = None,
     ) -> AuditLog:
         """
         Create audit log entry for security compliance.
-        
+
         Tracks all important actions for forensics.
         """
         from uuid import uuid4
@@ -394,7 +396,7 @@ def init_database():
         raise
 
 
-def backup_database(backup_path: Optional[str] = None) -> str:
+def backup_database(backup_path: str | None = None) -> str:
     """Create database backup for disaster recovery."""
     import shutil
     from datetime import datetime

@@ -24,22 +24,23 @@ class MemoryStore:
     for fast, local-only vector similarity search.
     """
 
-    def __init__(self, persist_dir: str | None = None, client=None, collection_name: str = "autohost_memory"):
+    def __init__(
+        self,
+        persist_dir: str | None = None,
+        client=None,
+        collection_name: str = "autohost_memory",
+    ):
         import chromadb
 
         if client is not None:
             self.client = client
         else:
             if persist_dir is None:
-                persist_dir = os.path.join(
-                    str(Path.home()), ".autohost", "memory"
-                )
+                persist_dir = os.path.join(str(Path.home()), ".autohost", "memory")
             os.makedirs(persist_dir, exist_ok=True)
             self.client = chromadb.PersistentClient(path=persist_dir)
 
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name
-        )
+        self.collection = self.client.get_or_create_collection(name=collection_name)
         logger.info("memory_store_initialized", path=persist_dir or "ephemeral")
 
     def store(
@@ -82,11 +83,7 @@ class MemoryStore:
             memories = []
             if results and results["documents"] and results["documents"][0]:
                 for i, doc in enumerate(results["documents"][0]):
-                    meta = (
-                        results["metadatas"][0][i]
-                        if results["metadatas"]
-                        else {}
-                    )
+                    meta = results["metadatas"][0][i] if results["metadatas"] else {}
                     memories.append({"content": doc, "metadata": meta})
             return memories
         except Exception as e:

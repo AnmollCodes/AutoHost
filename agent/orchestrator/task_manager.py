@@ -5,7 +5,7 @@ import json
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ from agent.config import settings
 logger = structlog.get_logger(__name__)
 
 
-class TaskState(str, Enum):
+class TaskState(StrEnum):
     """Task lifecycle states."""
 
     PENDING = "pending"  # Just created

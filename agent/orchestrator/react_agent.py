@@ -27,6 +27,7 @@ from agent.llm.prompts import (
     REFLECTION_PROMPT,
     TASK_DECOMPOSITION_PROMPT,
 )
+from agent.memory.memory_store import get_memory_store
 from agent.orchestrator.agent_models import (
     Action,
     AgentState,
@@ -39,6 +40,7 @@ from agent.orchestrator.agent_models import (
     Thought,
 )
 from agent.orchestrator.models import StepResult
+from agent.orchestrator.planner import TaskPlanner
 from agent.permissions import (
     AccessLevel,
     get_permission_error_message,
@@ -52,10 +54,8 @@ from agent.safety import (
     get_affected_paths,
 )
 from agent.sandbox.sandbox_runner import Sandbox
-from agent.web import fetch_webpage, web_search, crawl_internal
-from agent.orchestrator.planner import TaskPlanner
-from agent.memory.memory_store import get_memory_store
 from agent.tools.codebase_analyzer import analyze_codebase
+from agent.web import crawl_internal, fetch_webpage, web_search
 
 logger = structlog.get_logger(__name__)
 
@@ -169,12 +169,17 @@ class ReActAgent:
         steering_queue: asyncio.Queue | None = None,  # For mid-task user corrections
     ):
         from agent.config import settings
+
         self.sandbox = sandbox
         self.on_progress = on_progress
         self.on_confirm = on_confirm
         self.max_iterations = max_iterations
         self.conversation_history = conversation_history or []
-        self.require_confirmation = require_confirmation if require_confirmation is not None else settings.require_path_confirmation
+        self.require_confirmation = (
+            require_confirmation
+            if require_confirmation is not None
+            else settings.require_path_confirmation
+        )
         self.steering_queue = steering_queue
         self._is_sub_agent = False  # Track if this is a sub-agent
         self._steering_inputs: list[str] = []  # Accumulated steering from user
@@ -468,7 +473,12 @@ class ReActAgent:
                 if plan and plan.get("steps") and len(plan["steps"]) >= 2:
                     logger.info("task_planner_success", steps=len(plan["steps"]))
                     if self.on_progress:
-                        self.on_progress(1, "thinking", "Created structured plan", f"Executing {len(plan['steps'])} steps")
+                        self.on_progress(
+                            1,
+                            "thinking",
+                            "Created structured plan",
+                            f"Executing {len(plan['steps'])} steps",
+                        )
 
                     # Store the plan in context for ReAct agent
                     state.context["active_plan"] = plan["steps"]
@@ -758,16 +768,20 @@ class ReActAgent:
                 state.status = "completed"
 
         logger.info("react_agent_finished", status=state.status)
-        
+
         # Store successful responses into memory
-        if state.status == "completed" and state.final_answer and not self._is_sub_agent:
+        if (
+            state.status == "completed"
+            and state.final_answer
+            and not self._is_sub_agent
+        ):
             mem = get_memory_store()
             if mem:
                 mem.store(
                     f"Goal: {goal}\nResult: {state.final_answer}",
                     type="task_result",
                 )
-            
+
         return state
 
     async def _think(
@@ -794,8 +808,10 @@ class ReActAgent:
             )
             effective_goal = state.goal + steering_text
 
-        memories_text = "\n".join(f"- {m['content']}" for m in state.context.get("memories", []))
-        
+        memories_text = "\n".join(
+            f"- {m['content']}" for m in state.context.get("memories", [])
+        )
+
         prompt = REACT_STEP_PROMPT.format(
             goal=effective_goal,
             iteration=iteration,
@@ -1056,14 +1072,24 @@ class ReActAgent:
                 path = action.args.get("path", "")
                 # Expand ~ in path
                 path = os.path.expanduser(path) if path else os.path.expanduser("~")
-                
+
                 try:
                     analysis_result = analyze_codebase(path)
                     if analysis_result.startswith("Error:"):
-                        return StepResult(step_id="codebase_analyzer", status="error", error=analysis_result)
-                    return StepResult(step_id="codebase_analyzer", status="success", output=analysis_result)
+                        return StepResult(
+                            step_id="codebase_analyzer",
+                            status="error",
+                            error=analysis_result,
+                        )
+                    return StepResult(
+                        step_id="codebase_analyzer",
+                        status="success",
+                        output=analysis_result,
+                    )
                 except Exception as e:
-                    return StepResult(step_id="codebase_analyzer", status="error", error=str(e))
+                    return StepResult(
+                        step_id="codebase_analyzer", status="error", error=str(e)
+                    )
 
             # Handle web search
             if action.tool == "web_search":

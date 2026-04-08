@@ -97,20 +97,26 @@ def serve(
 @app.command()
 def analyze(path: str = typer.Argument(..., help="Path to the repository to analyze")):
     """Analyze a codebase to understand its architecture."""
-    from agent.tools.codebase_analyzer import analyze_codebase
     from rich.panel import Panel
-    from rich.markdown import Markdown
+
+    from agent.tools.codebase_analyzer import analyze_codebase
 
     console.print(f"\n  {Icons.ROBOT} [bold]Analyzing codebase at:[/bold] {path}\n")
 
-    with console.status("[cyan]Analyzing files, detecting frameworks, generating architecture map...", spinner="dots12"):
+    with console.status(
+        "[cyan]Analyzing files, detecting frameworks, generating architecture map...",
+        spinner="dots12",
+    ):
         summary = analyze_codebase(path)
 
     if summary.startswith("Error"):
         console.print(f"[bold red]{summary}[/bold red]")
     else:
         console.print(Panel(summary, title="Analysis Complete", border_style="green"))
-        console.print("\n[dim]Generated architecture.md and repo_map.json in the target directory.[/dim]")
+        console.print(
+            "\n[dim]Generated architecture.md and repo_map.json in the target directory.[/dim]"
+        )
+
 
 def cli():
     app()

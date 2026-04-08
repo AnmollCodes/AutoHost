@@ -15,11 +15,25 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 # Directories to always skip
-_SKIP_DIRS = frozenset({
-    "node_modules", "venv", "env", ".venv", ".env",
-    "__pycache__", ".git", ".hg", ".svn", "dist", "build",
-    ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache",
-})
+_SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        "venv",
+        "env",
+        ".venv",
+        ".env",
+        "__pycache__",
+        ".git",
+        ".hg",
+        ".svn",
+        "dist",
+        "build",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+    }
+)
 
 # Framework detection patterns
 _FRAMEWORK_PATTERNS: dict[str, re.Pattern] = {
@@ -36,10 +50,20 @@ _FRAMEWORK_PATTERNS: dict[str, re.Pattern] = {
 }
 
 # Well-known entry point filenames
-_ENTRY_POINTS = frozenset({
-    "main.py", "app.py", "index.js", "index.ts", "server.js",
-    "server.ts", "manage.py", "cli.py", "wsgi.py", "asgi.py",
-})
+_ENTRY_POINTS = frozenset(
+    {
+        "main.py",
+        "app.py",
+        "index.js",
+        "index.ts",
+        "server.js",
+        "server.ts",
+        "manage.py",
+        "cli.py",
+        "wsgi.py",
+        "asgi.py",
+    }
+)
 
 
 def analyze_codebase(target_path: str) -> str:
@@ -106,7 +130,11 @@ def analyze_codebase(target_path: str) -> str:
     arch_path = target / "architecture.md"
     _write_architecture_md(arch_path, target.name, repo_map, dependencies)
 
-    fw_text = ", ".join(repo_map["frameworks"]) if repo_map["frameworks"] else "unknown frameworks"
+    fw_text = (
+        ", ".join(repo_map["frameworks"])
+        if repo_map["frameworks"]
+        else "unknown frameworks"
+    )
     return (
         f"Codebase successfully analyzed. "
         f"Generated {arch_path.name} and {map_path.name} in {target_path}. "
@@ -166,7 +194,9 @@ def _write_architecture_md(
         "",
     ]
     for ext, count in repo_map["languages"].items():
-        lines.append(f"- `{ext or '(no extension)'}`: {count} file{'s' if count != 1 else ''}")
+        lines.append(
+            f"- `{ext or '(no extension)'}`: {count} file{'s' if count != 1 else ''}"
+        )
 
     lines += ["", "## Frameworks Detected", ""]
     if repo_map["frameworks"]:

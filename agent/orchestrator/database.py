@@ -225,7 +225,7 @@ class Database:
         if expired:
             placeholders = ",".join("?" * len(expired))
             await self.conn.execute(
-                f"DELETE FROM conversations WHERE session_id IN ({placeholders})",
+                f"DELETE FROM conversations WHERE session_id IN ({placeholders})",  # nosec B608
                 expired,
             )
             await self.conn.commit()

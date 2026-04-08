@@ -143,7 +143,7 @@ def check_path_access(path: str) -> AccessLevel:
         if _matches_pattern(expanded_path, pattern):
             logger.warning(f"Path '{path}' matches sensitive pattern '{pattern}'")
             return AccessLevel.SENSITIVE
-    
+
     # Also check if filename itself is sensitive (e.g., .env, credentials)
     if _is_sensitive_filename(expanded_path):
         logger.warning(f"Path '{path}' has sensitive filename")
@@ -177,8 +177,8 @@ def check_path_access(path: str) -> AccessLevel:
         # Check if it's outside common safe directories
         safe_dirs = [
             _expand_path("~"),
-            "/tmp",
-            "/var/tmp",
+            "/tmp",  # nosec B108
+            "/var/tmp",  # nosec B108
         ]
         for safe_dir in safe_dirs:
             if _is_subpath(expanded_path, safe_dir):

@@ -6,10 +6,10 @@ and require user confirmation before execution.
 
 import re
 import shlex
-from enum import Enum
+from enum import StrEnum
 
 
-class DangerLevel(str, Enum):
+class DangerLevel(StrEnum):
     """Level of danger for an operation."""
 
     SAFE = "safe"

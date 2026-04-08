@@ -4,8 +4,9 @@ Breaks complex user goals into ordered, actionable steps before
 handing them to the ReAct execution engine.
 """
 
-import structlog
 from typing import Any
+
+import structlog
 
 from agent.llm.client import call_llm_json_async
 from agent.llm.prompts import PLANNER_PROMPT
@@ -13,10 +14,16 @@ from agent.llm.prompts import PLANNER_PROMPT
 logger = structlog.get_logger(__name__)
 
 # Tools the executor actually supports
-_VALID_TOOLS = frozenset({
-    "shell", "python", "codebase_analyzer",
-    "web_search", "fetch_webpage", "crawl_internal",
-})
+_VALID_TOOLS = frozenset(
+    {
+        "shell",
+        "python",
+        "codebase_analyzer",
+        "web_search",
+        "fetch_webpage",
+        "crawl_internal",
+    }
+)
 
 _MAX_PLAN_STEPS = 10
 
@@ -40,8 +47,7 @@ class TaskPlanner:
             if the task is simple or planning fails.
         """
         hist_text = "\n".join(
-            f"{m['role'].upper()}: {m['content']}"
-            for m in (conversation_history or [])
+            f"{m['role'].upper()}: {m['content']}" for m in (conversation_history or [])
         )
 
         prompt = PLANNER_PROMPT.format(

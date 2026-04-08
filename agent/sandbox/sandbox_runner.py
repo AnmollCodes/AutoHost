@@ -140,7 +140,7 @@ class Sandbox:
                 "no-new-privileges",
                 "--read-only",
                 "--tmpfs",
-                "/tmp:size=10m,exec,nosuid,nodev",
+                "/tmp:size=10m,exec,nosuid,nodev",  # nosec B108
                 "-v",
                 f"{tmpdir}:/app:ro",
                 "--workdir",
@@ -151,7 +151,7 @@ class Sandbox:
             ]
 
             try:
-                proc = await asyncio.create_subprocess_exec(
+                proc = await asyncio.create_subprocess_exec(  # nosec B603
                     *cmd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.STDOUT,

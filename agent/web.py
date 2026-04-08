@@ -159,58 +159,75 @@ def search_and_summarize(query: str, max_results: int = 3) -> dict[str, Any]:
 
     return {"results": enriched}
 
+
 def crawl_internal(start_url: str, max_pages: int = 3) -> dict[str, Any]:
     """
     Crawl a URL and follow internal links up to max_pages.
     Great for scraping internal network docs or localhost.
-    
+
     Args:
         start_url: Origin URL to start scraping.
         max_pages: Maximum number of internal pages to read.
-        
+
     Returns:
         Dict with concatenated content and number of pages crawled.
     """
-    from urllib.parse import urlparse, urljoin
+    from urllib.parse import urljoin, urlparse
+
     try:
         visited = set()
         to_visit = [start_url]
         content_parts = []
         domain = urlparse(start_url).netloc
-        
+
         while to_visit and len(visited) < max_pages:
             url = to_visit.pop(0)
-            if url in visited: continue
+            if url in visited:
+                continue
             visited.add(url)
-            
+
             try:
                 headers = {"User-Agent": USER_AGENT}
                 response = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
-                if response.status_code != 200: continue
-                
+                if response.status_code != 200:
+                    continue
+
                 soup = BeautifulSoup(response.text, "lxml")
-                
-                for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+
+                for element in soup(
+                    ["script", "style", "nav", "footer", "header", "aside"]
+                ):
                     element.decompose()
-                    
+
                 text = soup.get_text(separator="\n", strip=True)
                 lines = [line.strip() for line in text.splitlines() if line.strip()]
-                page_text = f"--- START {url} ---\n" + "\n".join(lines) + f"\n--- END {url} ---"
+                page_text = (
+                    f"--- START {url} ---\n" + "\n".join(lines) + f"\n--- END {url} ---"
+                )
                 content_parts.append(page_text)
-                
-                for a in soup.find_all('a', href=True):
-                    href_val = a['href']
-                    next_url = urljoin(url, str(href_val[0] if isinstance(href_val, list) else href_val))
-                    if urlparse(next_url).netloc == domain and next_url not in visited and next_url not in to_visit:
-                        if not any(next_url.endswith(ext) for ext in ['.png', '.jpg', '.pdf', '.zip']):
-                            to_visit.append(next_url)
+
+                for a in soup.find_all("a", href=True):
+                    href_val = a["href"]
+                    next_url = urljoin(
+                        url,
+                        str(href_val[0] if isinstance(href_val, list) else href_val),
+                    )
+                    if (
+                        urlparse(next_url).netloc == domain
+                        and next_url not in visited
+                        and next_url not in to_visit
+                    ) and not any(
+                        next_url.endswith(ext)
+                        for ext in [".png", ".jpg", ".pdf", ".zip"]
+                    ):
+                        to_visit.append(next_url)
             except Exception:
                 continue
-                
+
         content = "\n\n".join(content_parts)
         if len(content) > 15000:
             content = content[:15000] + "\n\n[Content truncated...]"
-            
+
         return {"content": content, "pages_crawled": len(visited)}
     except Exception as e:
         logger.error(f"Internal crawl error: {e}")

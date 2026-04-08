@@ -1,11 +1,11 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel
 
 
-class TaskState(str, Enum):
+class TaskState(StrEnum):
     """Task lifecycle states."""
 
     PENDING = "pending"
@@ -97,7 +97,7 @@ class TaskResponse(BaseModel):
     results: dict[str, StepResult]
 
 
-class WSMessageType(str, Enum):
+class WSMessageType(StrEnum):
     """WebSocket message types."""
 
     SUBSCRIBE = "subscribe"

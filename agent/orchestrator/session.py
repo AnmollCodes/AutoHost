@@ -85,7 +85,7 @@ async def cleanup_sessions():
                 conn = _get_sync_db()
                 placeholders = ",".join("?" * len(expired))
                 conn.execute(
-                    f"DELETE FROM conversations WHERE session_id IN ({placeholders})",
+                    f"DELETE FROM conversations WHERE session_id IN ({placeholders})",  # nosec B608
                     expired,
                 )
                 conn.commit()
@@ -110,7 +110,7 @@ def cleanup_sessions_sync():
             conn = _get_sync_db()
             placeholders = ",".join("?" * len(expired))
             conn.execute(
-                f"DELETE FROM conversations WHERE session_id IN ({placeholders})",
+                f"DELETE FROM conversations WHERE session_id IN ({placeholders})",  # nosec B608
                 expired,
             )
             conn.commit()

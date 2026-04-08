@@ -11,26 +11,22 @@ Includes:
 - Task ownership validation (HIGH-2)
 """
 
-import os
 from datetime import datetime
 
 import structlog
-from fastapi import Request, Response, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi import HTTPException, Request, Response
 from pybreaker import CircuitBreaker
+from starlette.middleware.base import BaseHTTPMiddleware
 
-from agent.config import settings
+from agent.orchestrator.database_secure import (
+    backup_database,
+    init_database,
+)
 from agent.security_middleware import (
     RateLimiter,
     sanitize_for_logging,
     sanitize_prompt_input,
-    get_current_user,
-    create_session,
-    invalidate_session,
-    get_idempotent_response,
-    track_idempotency,
 )
-from agent.orchestrator.database_secure import DatabaseManager, init_database, backup_database
 
 logger = structlog.get_logger(__name__)
 
@@ -164,13 +160,12 @@ class PromptSanitizationMiddleware(BaseHTTPMiddleware):
                     data["request"] = sanitize_prompt_input(data["request"])
 
                 # Create new request with sanitized data
-                from io import BytesIO
 
                 request._body = json.dumps(data).encode()
-                
+
                 async def disconnect_receive():
                     return {"type": "http.disconnect"}
-                
+
                 request._receive = disconnect_receive
 
                 # Create new receive callable
@@ -215,8 +210,9 @@ def configure_security(app):
 
 def setup_backups():
     """Setup scheduled database backups."""
-    import schedule
     import threading
+
+    import schedule
 
     def backup_job():
         """Backup database daily."""

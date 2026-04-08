@@ -120,8 +120,8 @@ For running a command:
 {{"thought": "...", "is_complete": false, "action": {{"tool": "shell|python|web_search|fetch_webpage|crawl_internal", "args": {{...}}}}}}
 ```
 
-CRITICAL FORMATTING INSTRUCTION: 
-When 'is_complete' is true, format your 'response' text beautifully using pure markdown! 
+CRITICAL FORMATTING INSTRUCTION:
+When 'is_complete' is true, format your 'response' text beautifully using pure markdown!
 - Use headers (##), bold (**text**), lists (-), and emojis where appropriate to make it highly structured and readable for the user. Do not be a plain boring wall of text.
 
 CRITICAL RULE: DO NOT use <think> tags. Do not produce long reasoning chains. Output the JSON block IMMEDIATELY to save processing time!

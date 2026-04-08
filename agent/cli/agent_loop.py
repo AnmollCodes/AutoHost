@@ -142,19 +142,26 @@ def _interactive_loop(model: str):
                     elif action == "list":
                         _list_macros()
                     else:
-                        console.print("  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]")
+                        console.print(
+                            "  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]"
+                        )
                 else:
-                    console.print("  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]")
+                    console.print(
+                        "  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]"
+                    )
                 continue
 
             if user_input.lower().startswith("/remember "):
                 text_to_remember = user_input[10:].strip()
                 if text_to_remember:
                     from agent.memory.memory_store import get_memory_store
+
                     mem = get_memory_store()
                     if mem:
                         doc_id = mem.store(text_to_remember, type="user_preference")
-                        console.print(f"  [green]✓[/green] Saved memory. ID: {doc_id[-6:]}")
+                        console.print(
+                            f"  [green]✓[/green] Saved memory. ID: {doc_id[-6:]}"
+                        )
                     else:
                         console.print("  [red]Memory system unavailable.[/red]")
                 else:
@@ -166,6 +173,7 @@ def _interactive_loop(model: str):
                 query = user_input[8:].strip()
                 if query:
                     from agent.memory.memory_store import get_memory_store
+
                     mem = get_memory_store()
                     if mem:
                         results = mem.retrieve(query)
@@ -463,15 +471,16 @@ def _process_input_agentic(
                 async def steering_listener():
                     """Listen for user steering input while agent runs."""
                     import sys
-                    
+
                     if sys.platform == "win32":
-                        # Windows terminal cannot easily do non-blocking stdin reads 
+                        # Windows terminal cannot easily do non-blocking stdin reads
                         # without breaking `sys.stdin` for rich.Confirm.ask calls.
                         # Mid-task steering is disabled on Windows.
                         while True:
                             await asyncio.sleep(1)
                     else:
                         import select
+
                         while True:
                             await asyncio.sleep(0.1)
                             if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
@@ -480,7 +489,9 @@ def _process_input_agentic(
                                     if line:
                                         await steering_queue.put(line)
                                         current_state["status"] = "steering"
-                                        current_state["thought"] = f"User: {line[:40]}..."
+                                        current_state["thought"] = (
+                                            f"User: {line[:40]}..."
+                                        )
                                 except Exception:
                                     pass
 
@@ -689,12 +700,13 @@ def _show_response(text: str, model: str):
     console.print()
     console.print("  [bold cyan]◆[/bold cyan] [bold white]AutoHost[/bold white]")
     console.print()
-    
+
     # Use rich Markdown for beautiful rendering
     md = Markdown(text)
     # Print with an indent by wrapping in a simple padding or just printing directly
     # To keep the indentation we had before, we can use a Pad or just print
     from rich.padding import Padding
+
     console.print(Padding(md, (0, 0, 0, 4)))
 
     # Add trailing padding for visual separation
@@ -857,94 +869,125 @@ def _show_history(conversation_history: list):
 
     console.print()
 
+
 def _save_macro(name: str):
     import json
     from pathlib import Path
+
     global _last_completed_state
-    
+
     if not _last_completed_state:
-        console.print("  [red]No previously successful actions to save as a macro.[/red]")
+        console.print(
+            "  [red]No previously successful actions to save as a macro.[/red]"
+        )
         return
-        
+
     macro_dir = Path("~/.autohost/macros").expanduser()
     macro_dir.mkdir(parents=True, exist_ok=True)
-    
+
     actions = []
     for step in _last_completed_state.steps:
-        if step.action and step.action.tool != "done" and step.result and step.result.status == "success":
-            actions.append({
-                "tool": step.action.tool,
-                "args": step.action.args,
-                "description": step.action.description
-            })
-            
+        if (
+            step.action
+            and step.action.tool != "done"
+            and step.result
+            and step.result.status == "success"
+        ):
+            actions.append(
+                {
+                    "tool": step.action.tool,
+                    "args": step.action.args,
+                    "description": step.action.description,
+                }
+            )
+
     if not actions:
         console.print("  [red]No tool actions found in the last run to save.[/red]")
         return
-        
+
     macro_file = macro_dir / f"{name}.json"
     with open(macro_file, "w") as f:
-        json.dump({"description": _last_completed_state.goal, "actions": actions}, f, indent=2)
-        
-    console.print(f"  [green]✓[/green] Saved macro '[bold cyan]{name}[/bold cyan]' with {len(actions)} steps.")
+        json.dump(
+            {"description": _last_completed_state.goal, "actions": actions}, f, indent=2
+        )
+
+    console.print(
+        f"  [green]✓[/green] Saved macro '[bold cyan]{name}[/bold cyan]' with {len(actions)} steps."
+    )
+
 
 def _list_macros():
-    from pathlib import Path
     import json
+    from pathlib import Path
+
     macro_dir = Path("~/.autohost/macros").expanduser()
     if not macro_dir.exists():
         console.print("  [dim]No macros saved yet.[/dim]")
         return
-        
+
     macros = list(macro_dir.glob("*.json"))
     if not macros:
         console.print("  [dim]No macros saved yet.[/dim]")
         return
-        
-    console.print("\n  [bold cyan]◆[/bold cyan] [bold white]Saved Macros[/bold white]\n")
+
+    console.print(
+        "\n  [bold cyan]◆[/bold cyan] [bold white]Saved Macros[/bold white]\n"
+    )
     for macro in macros:
-        with open(macro, "r") as f:
+        with open(macro) as f:
             data = json.load(f)
         desc = data.get("description", "No description")
         count = len(data.get("actions", []))
-        console.print(f"    [cyan]{macro.stem}[/cyan] [dim]({count} steps) - {desc[:50]}[/dim]")
+        console.print(
+            f"    [cyan]{macro.stem}[/cyan] [dim]({count} steps) - {desc[:50]}[/dim]"
+        )
     print_padding(1)
 
+
 def _run_macro(name: str):
-    import json
     import asyncio
+    import json
     from pathlib import Path
+
+    from agent.orchestrator.agent_models import Action
     from agent.orchestrator.deps import get_sandbox
     from agent.orchestrator.react_agent import ReActAgent
-    from agent.orchestrator.agent_models import Action
-    
+
     macro_dir = Path("~/.autohost/macros").expanduser()
     macro_file = macro_dir / f"{name}.json"
-    
+
     if not macro_file.exists():
-        console.print(f"  [red]Macro '{name}' not found. Use /macro list to see available macros.[/red]")
+        console.print(
+            f"  [red]Macro '{name}' not found. Use /macro list to see available macros.[/red]"
+        )
         return
-        
-    with open(macro_file, "r") as f:
+
+    with open(macro_file) as f:
         data = json.load(f)
-        
+
     actions = data.get("actions", [])
     if not actions:
         console.print(f"  [red]Macro '{name}' is empty.[/red]")
         return
-        
-    console.print(f"\n  [bold cyan]⚡ Running Macro:[/bold cyan] {name} [dim]({len(actions)} steps)[/dim]\n")
-    
+
+    console.print(
+        f"\n  [bold cyan]⚡ Running Macro:[/bold cyan] {name} [dim]({len(actions)} steps)[/dim]\n"
+    )
+
     sandbox = get_sandbox()
     agent = ReActAgent(sandbox, require_confirmation=False)
-    
+
     async def run_steps():
         context = {}
         for i, act_dict in enumerate(actions, 1):
             action = Action(**act_dict)
-            cmd_preview = str(action.args.get("command", action.args.get("code", str(action.args))))[:50].replace("\\n", " ")
-            console.print(f"    [dim]Step {i}:[/dim] [cyan]{action.tool}[/cyan] [dim]▸ {cmd_preview}[/dim]")
-            
+            cmd_preview = str(
+                action.args.get("command", action.args.get("code", str(action.args)))
+            )[:50].replace("\\n", " ")
+            console.print(
+                f"    [dim]Step {i}:[/dim] [cyan]{action.tool}[/cyan] [dim]▸ {cmd_preview}[/dim]"
+            )
+
             result = await agent._execute_action(action, context)
             if result.status == "success":
                 console.print("      [green]✓ Success[/green]")
@@ -953,12 +996,10 @@ def _run_macro(name: str):
             else:
                 console.print(f"      [red]✗ Failed: {result.error}[/red]")
                 break
-        console.print(f"\n  [dim]✓ Macro execution finished.[/dim]")
+        console.print("\n  [dim]✓ Macro execution finished.[/dim]")
         print_padding(1)
-        
+
     asyncio.run(run_steps())
-    console.print(f"    [dim]{len(conversation_history)} messages in history[/dim]")
-    print_padding(1)
 
 
 def _show_goodbye():

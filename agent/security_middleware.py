@@ -11,7 +11,6 @@ Implements:
 import re
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Union
 
 import structlog
 from fastapi import HTTPException, Request
@@ -101,7 +100,7 @@ def sanitize_prompt_input(text: str, max_length: int = 2000) -> str:
     return text
 
 
-def sanitize_for_logging(data: Union[dict, str]) -> str:
+def sanitize_for_logging(data: dict | str) -> str:
     """
     Sanitize data for logging to prevent secrets leakage.
 
@@ -117,9 +116,21 @@ def sanitize_for_logging(data: Union[dict, str]) -> str:
 
     if isinstance(data, dict):
         sensitive_keys = {
-            "api_key", "token", "secret", "password", "auth", "credential",
-            "access_token", "refresh_token", "jwt", "bearer", "session_id",
-            "ssn", "credit_card", "card_number", "cvv",
+            "api_key",
+            "token",
+            "secret",
+            "password",
+            "auth",
+            "credential",
+            "access_token",
+            "refresh_token",
+            "jwt",
+            "bearer",
+            "session_id",
+            "ssn",
+            "credit_card",
+            "card_number",
+            "cvv",
         }
 
         sanitized = {}
@@ -278,9 +289,7 @@ class RateLimiter:
             self.request_times[key] = []
 
         # Remove old requests outside the window
-        self.request_times[key] = [
-            t for t in self.request_times[key] if t > cutoff
-        ]
+        self.request_times[key] = [t for t in self.request_times[key] if t > cutoff]
 
         # Check if limit exceeded
         if len(self.request_times[key]) >= self.requests_per_minute:
@@ -314,7 +323,7 @@ def track_idempotency(key: str, response: dict) -> None:
     }
 
 
-def get_idempotent_response(key: str) -> Optional[dict]:
+def get_idempotent_response(key: str) -> dict | None:
     """Get cached response for idempotency key if still valid."""
     if key not in _idempotency_store:
         return None

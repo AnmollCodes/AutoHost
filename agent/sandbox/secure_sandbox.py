@@ -10,11 +10,10 @@ This module provides hardened Python code execution with:
 """
 
 import asyncio
-import os
 import resource
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import structlog
 
@@ -64,12 +63,14 @@ class SecureSandbox:
     - Execution timeout enforced
     """
 
-    def __init__(self, timeout: int = 300, working_dir: Optional[str] = None) -> None:
+    def __init__(self, timeout: int = 300, working_dir: str | None = None) -> None:
         self.timeout = timeout
         self.working_dir = Path(working_dir or tempfile.gettempdir()).resolve()
         self.permissive = False  # CRITICAL: Always secure by default
 
-    async def run_python(self, code: str, working_dir: Optional[str] = None) -> Dict[str, Any]:
+    async def run_python(
+        self, code: str, working_dir: str | None = None
+    ) -> dict[str, Any]:
         """
         Execute Python code securely.
 
@@ -81,11 +82,7 @@ class SecureSandbox:
             {"output": str} on success
             {"error": str} on failure
         """
-        exec_dir = (
-            Path(working_dir).resolve()
-            if working_dir
-            else self.working_dir
-        )
+        exec_dir = Path(working_dir).resolve() if working_dir else self.working_dir
 
         # Guard code with security barriers
         hardened_code = self._harden_code(code, str(exec_dir))
@@ -96,7 +93,7 @@ class SecureSandbox:
                 asyncio.to_thread(self._execute_hardened, hardened_code, str(exec_dir)),
                 timeout=self.timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(
                 "sandbox_execution_timeout",
                 timeout=self.timeout,
@@ -134,23 +131,23 @@ _original_import = __builtins__["__import__"] if isinstance(__builtins__, dict) 
 def _safe_open(path, *args, **kwargs):
     """Only allow file access within working_dir"""
     p = Path(path).resolve()
-    
+
     # Check if path is within allowed directory
     try:
         p.relative_to(_ALLOWED_DIR)
     except ValueError:
         raise PermissionError(f"Access denied: {{p}} outside working directory")
-    
+
     return open(p, *args, **kwargs)
 
 # Guard: Safe import - block dangerous modules
 def _safe_import(name, *args, **kwargs):
     """Block dangerous imports"""
     base_module = name.split(".")[0]
-    
+
     if base_module in _FORBIDDEN_MODULES:
         raise ImportError(f"Module '{{name}}' is not allowed in sandbox")
-    
+
     return _original_import(name, *args, **kwargs)
 
 # Guard: Prevent process spawning
@@ -188,12 +185,12 @@ sys.stdout = _output_buffer
 # User code here (with guards active):
 '''
 
-        suffix = '''
+        suffix = """
 
 # Restore stdout and return output
 sys.stdout = _sys_stdout
 __output__ = _output_buffer.getvalue()
-'''
+"""
 
         return prefix + code + suffix
 
@@ -214,13 +211,13 @@ __output__ = _output_buffer.getvalue()
                 pass
 
             # Execute code
-            exec_env: Dict[str, Any] = {
+            exec_env: dict[str, Any] = {
                 "__builtins__": __builtins__,
                 "__name__": "__sandbox__",
                 "__doc__": None,
             }
 
-            exec(code, exec_env)
+            exec(code, exec_env)  # nosec B102
 
             output = exec_env.get("__output__", "")
             return {"output": output}
