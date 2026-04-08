@@ -1,0 +1,20 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.9, pytest-8.3.3, pluggy-1.5.0 -- C:\Users\vansh\AppData\Local\Microsoft\WindowsApps\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\vansh\Downloads\autoHost-main\autoHost-main
+configfile: pyproject.toml
+plugins: anyio-4.12.0, asyncio-0.24.0, cov-7.0.0, xdist-3.7.0, time-machine-2.9.0
+asyncio: mode=Mode.AUTO, default_loop_scope=None
+collecting ... collected 2 items
+
+tests/test_codebase_analyzer.py::test_codebase_analyzer_generates_outputs FAILED [ 50%]
+tests/test_codebase_analyzer.py::test_invalid_path PASSED                [100%]
+
+================================== FAILURES ===================================
+__________________ test_codebase_analyzer_generates_outputs ___________________
+tests\test_codebase_analyzer.py:32: in test_codebase_analyzer_generates_outputs
+    assert "FastAPI" in summary
+E   AssertionError: assert 'FastAPI' in 'Codebase successfully analyzed. Generated architecture.md and repo_map.json in C:\\Users\\vansh\\AppData\\Local\\Temp\\tmpears_uo9. Project uses unknown frameworks with 3 files.'
+=========================== short test summary info ===========================
+FAILED tests/test_codebase_analyzer.py::test_codebase_analyzer_generates_outputs
+========================= 1 failed, 1 passed in 0.37s =========================
