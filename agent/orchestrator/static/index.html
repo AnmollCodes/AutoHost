@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoHost</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="logo">
+            <span style="font-size: 1.25rem;">🤖</span>
+            <h1>AutoHost</h1>
+            <span class="logo-version">v0.3.0</span>
+            <span class="status-badge connecting" id="status-badge">Connecting</span>
+        </div>
+        <div class="header-center">
+            <div class="model-selector">
+                <label>Model:</label>
+                <select id="model-select" onchange="changeModel(this.value)">
+                    <option value="kimi-k2.5:cloud">kimi-k2.5:cloud</option>
+                    <option value="llama3.2">llama3.2</option>
+                    <option value="codellama">codellama</option>
+                    <option value="deepseek-coder">deepseek-coder</option>
+                    <option value="qwen2.5-coder">qwen2.5-coder</option>
+                </select>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="History (Ctrl+H)">📜</button>
+            <button class="icon-btn" onclick="showStatus()" title="Status (Ctrl+I)">ℹ️</button>
+            <button class="icon-btn" onclick="clearChat()" title="Clear (Ctrl+K)">🗑️</button>
+        </div>
+    </header>
+    
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar hidden" id="sidebar">
+            <div class="sidebar-header">
+                <h3>History</h3>
+                <button class="icon-btn" onclick="toggleSidebar()">✕</button>
+            </div>
+            <div class="sidebar-content" id="history-list">
+                <div class="no-history">No conversation history yet</div>
+            </div>
+        </aside>
+        
+        <!-- Chat Wrapper -->
+        <div class="chat-wrapper">
+            <div class="chat-container" id="chat-container">
+                <!-- Empty State -->
+                <div class="empty-state" id="empty-state">
+                    <h2>👋 Hey there!</h2>
+                    <p>I'm your local AI assistant. Ask me anything or give me a task.</p>
+                    <div class="examples">
+                        <button class="example-btn" onclick="useExample(this)">List files in home directory</button>
+                        <button class="example-btn" onclick="useExample(this)">What's the current date?</button>
+                        <button class="example-btn" onclick="useExample(this)">Search for Python files</button>
+                        <button class="example-btn" onclick="useExample(this)">Check disk usage</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Input Area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <div class="autocomplete" id="autocomplete"></div>
+                    <input 
+                        type="text" 
+                        id="message-input" 
+                        placeholder="Ask anything or type / for commands..." 
+                        autocomplete="off"
+                    >
+                    <button id="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+                <div class="keyboard-hints">
+                    <span><kbd>Enter</kbd> Send</span>
+                    <span><kbd>Ctrl+K</kbd> Clear</span>
+                    <span><kbd>Ctrl+H</kbd> History</span>
+                    <span><kbd>/help</kbd> Commands</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay hidden" id="confirm-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span class="icon">⚠️</span>
+                <h3>Confirmation Required</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message">This action requires your approval.</p>
+                <div class="modal-command" id="confirm-command"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn cancel" onclick="handleConfirm(false)">Cancel</button>
+                <button class="modal-btn confirm" onclick="handleConfirm(true)">Proceed</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Markdown Library -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
+    <!-- Application Script -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
