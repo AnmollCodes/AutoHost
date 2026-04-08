@@ -1,0 +1,968 @@
+"""Pure agentic loop - ReAct-based autonomous agent."""
+
+import asyncio
+import contextlib
+import io
+import os
+import shutil
+import sys
+import time
+
+from rich.live import Live
+from rich.text import Text
+
+from agent.cli.console import (
+    console,
+    format_duration,
+    print_error,
+    print_padding,
+)
+from agent.version import __version__
+
+# Tracking last successful state for macros
+_last_completed_state = None
+
+
+@contextlib.contextmanager
+def suppress_stderr():
+    """Suppress stderr output to prevent shell warnings from corrupting CLI display.
+
+    This captures any stderr output (from subprocesses, libraries, etc.)
+    during agent execution to maintain clean CLI output.
+    """
+    # Save original stderr
+    original_stderr = sys.stderr
+    original_fd = os.dup(2)  # Duplicate the file descriptor
+
+    try:
+        # Create a null device to absorb stderr
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, 2)  # Redirect fd 2 (stderr) to devnull
+        os.close(devnull)
+
+        # Also redirect Python's stderr object
+        sys.stderr = io.StringIO()
+
+        yield
+    finally:
+        # Restore original stderr
+        os.dup2(original_fd, 2)
+        os.close(original_fd)
+        sys.stderr = original_stderr
+
+
+# Get terminal width for proper formatting
+def _get_width() -> int:
+    """Get terminal width, with a reasonable default."""
+    return min(shutil.get_terminal_size().columns - 4, 100)
+
+
+def run_agent(model_override: str = None):
+    """Main agent loop - handles everything autonomously."""
+    from agent.config import settings as app_settings
+    from agent.llm.client import check_ollama_health
+
+    global settings
+    settings = app_settings
+
+    # Check connection
+    with console.status("[cyan]Connecting...[/cyan]", spinner="dots"):
+        healthy, error = check_ollama_health()
+
+    if not healthy:
+        print_error("Cannot connect to Ollama", error)
+        console.print("\n[dim]Start Ollama: [cyan]ollama serve[/cyan][/dim]")
+        raise SystemExit(1)
+
+    model = model_override or settings.ollama_model
+
+    # Always interactive mode
+    _interactive_loop(model)
+
+
+def _interactive_loop(model: str):
+    """Interactive agent loop with conversation memory."""
+    console.clear()
+    # Add top margin so content isn't at very top of terminal
+    print_padding(1)
+    _show_welcome(model)
+
+    # Conversation history for context
+    conversation_history = []
+
+    while True:
+        try:
+            user_input = _get_input()
+
+            if not user_input:
+                continue
+
+            if user_input.lower() in ("/quit", "/q", "/exit", "quit", "exit"):
+                _show_goodbye()
+                break
+
+            if user_input.lower() in ("/help", "/h"):
+                _show_help()
+                continue
+
+            if user_input.lower() == "/clear":
+                console.clear()
+                print_padding(1)  # Top margin
+                _show_welcome(model)
+                conversation_history.clear()  # Also clear history
+                continue
+
+            if user_input.lower() == "/status":
+                _show_status(model)
+                continue
+
+            if user_input.lower() == "/history":
+                _show_history(conversation_history)
+                continue
+
+            if user_input.lower().startswith("/model "):
+                new_model = user_input[7:].strip()
+                if new_model:
+                    model = new_model
+                    console.print(
+                        f"  [green]✓[/green] Switched to model: [cyan]{model}[/cyan]"
+                    )
+                    console.print()
+                continue
+
+            if user_input.lower().startswith("/macro "):
+                parts = user_input.split(" ", 2)
+                if len(parts) >= 2:
+                    action = parts[1].lower()
+                    name = parts[2].strip() if len(parts) > 2 else ""
+                    if action == "save" and name:
+                        _save_macro(name)
+                    elif action == "run" and name:
+                        _run_macro(name)
+                    elif action == "list":
+                        _list_macros()
+                    else:
+                        console.print("  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]")
+                else:
+                    console.print("  [red]Usage: /macro save <name> | /macro run <name> | /macro list[/red]")
+                continue
+
+            if user_input.lower().startswith("/remember "):
+                text_to_remember = user_input[10:].strip()
+                if text_to_remember:
+                    from agent.memory.memory_store import get_memory_store
+                    mem = get_memory_store()
+                    if mem:
+                        doc_id = mem.store(text_to_remember, type="user_preference")
+                        console.print(f"  [green]✓[/green] Saved memory. ID: {doc_id[-6:]}")
+                    else:
+                        console.print("  [red]Memory system unavailable.[/red]")
+                else:
+                    console.print("  [red]Usage: /remember <text>[/red]")
+                console.print()
+                continue
+
+            if user_input.lower().startswith("/recall "):
+                query = user_input[8:].strip()
+                if query:
+                    from agent.memory.memory_store import get_memory_store
+                    mem = get_memory_store()
+                    if mem:
+                        results = mem.retrieve(query)
+                        if results:
+                            console.print()
+                            console.print("  [bold cyan]Recalled Memories:[/bold cyan]")
+                            for r in results:
+                                console.print(f"  - {r['content']}")
+                            console.print()
+                        else:
+                            console.print("  [dim]No relevant memories found.[/dim]")
+                            console.print()
+                    else:
+                        console.print("  [red]Memory system unavailable.[/red]")
+                else:
+                    console.print("  [red]Usage: /recall <query>[/red]")
+                continue
+
+            result = _process_input_agentic(user_input, model, conversation_history)
+
+            # Add to conversation history
+            if result:
+                conversation_history.append({"role": "user", "content": user_input})
+                conversation_history.append({"role": "assistant", "content": result})
+                # Keep history manageable
+                max_history = settings.max_history_messages
+                if len(conversation_history) > max_history:
+                    conversation_history = conversation_history[-max_history:]
+
+        except KeyboardInterrupt:
+            console.print()
+            console.print(
+                "  [dim]Interrupted. Type [white]/quit[/white] to exit.[/dim]"
+            )
+            print_padding(1)
+        except EOFError:
+            _show_goodbye()
+            break
+
+
+def _process_input_agentic(
+    user_input: str, model: str, conversation_history: list = None
+) -> str | None:
+    """Process input using the ReAct agentic loop.
+
+    Returns the assistant's response for conversation history.
+    """
+    from agent.llm.client import LLMError
+    from agent.orchestrator.deps import get_sandbox
+    from agent.orchestrator.react_agent import ReActAgent
+
+    sandbox = get_sandbox()
+
+    # State for live display
+    current_state = {
+        "iteration": 0,
+        "thought": "",
+        "action": "",
+        "status": "thinking",
+        "steps": [],  # List of (iteration, action, status, thought_preview)
+        "last_error": None,  # Track last error for retry message
+        "parallel_subtasks": [],  # List of subtask descriptions for parallel mode
+        "parallel_completed": 0,  # Count of completed subtasks
+    }
+
+    # Nice spinner animation frames
+    spinner_frames = ["◐", "◓", "◑", "◒"]
+    frame_idx = [0]  # Use list to mutate in closure
+
+    def build_agent_display():
+        """Build spinner display showing current activity."""
+        frame_idx[0] = (frame_idx[0] + 1) % len(spinner_frames)
+        spinner = spinner_frames[frame_idx[0]]
+
+        iteration = current_state["iteration"]
+        status = current_state["status"]
+        steps = current_state["steps"]
+        action = current_state["action"]
+        parallel_subtasks = current_state["parallel_subtasks"]
+
+        # Build display
+        line = Text()
+        line.append("  ")
+
+        # Handle parallel sub-agent mode
+        if status == "parallel" and parallel_subtasks:
+            line.append("⚡ ", style="bold blue")
+            line.append(
+                f"Running {len(parallel_subtasks)} subtasks in parallel", style="blue"
+            )
+            line.append("\n")
+            # Calculate max subtask width (terminal width - indent - prefix - margin)
+            term_width = _get_width()
+            max_subtask_width = max(term_width - 15, 40)
+            for i, subtask in enumerate(parallel_subtasks):
+                line.append("    ")
+                # Truncate with ellipsis if too long
+                display_subtask = (
+                    subtask
+                    if len(subtask) <= max_subtask_width
+                    else subtask[: max_subtask_width - 3] + "..."
+                )
+                if i < current_state["parallel_completed"]:
+                    line.append("├─ ✓ ", style="green")
+                    line.append(display_subtask, style="green")
+                else:
+                    line.append(f"├─ {spinner} ", style="cyan")
+                    line.append(display_subtask, style="cyan")
+                if i < len(parallel_subtasks) - 1:
+                    line.append("\n")
+            return line
+
+        if status == "retrying":
+            line.append(f"{spinner} ", style="bold yellow")
+            line.append(
+                "Hmm, that didn't work. Let me try another approach...", style="yellow"
+            )
+        elif status == "steering":
+            line.append("↪ ", style="bold magenta")
+            thought = current_state.get("thought", "")
+            if thought:
+                line.append(f"Adjusting: {thought[:50]}", style="magenta")
+            else:
+                line.append("Received your update, adjusting...", style="magenta")
+        elif status == "thinking":
+            line.append(f"{spinner} ", style="bold yellow")
+            line.append("Thinking...", style="yellow")
+        elif status == "executing":
+            line.append(f"{spinner} ", style="bold cyan")
+            # Show what's being executed
+            if action:
+                if action.startswith("shell:"):
+                    cmd = action[6:].strip()
+                    if len(cmd) > 50:
+                        cmd = cmd[:47] + "..."
+                    line.append(f"$ {cmd}", style="cyan")
+                elif action.startswith("python:"):
+                    line.append("Running Python...", style="cyan")
+                elif action.startswith("web_search:"):
+                    line.append("Searching the web...", style="cyan")
+                elif action.startswith("fetch_webpage:"):
+                    line.append("Fetching webpage...", style="cyan")
+                else:
+                    line.append("Executing...", style="cyan")
+            else:
+                line.append("Executing...", style="cyan")
+
+        # Show step count and progress dots
+        if iteration > 0 or steps:
+            line.append("  ", style="dim")
+            if steps:
+                for step in steps[-5:]:
+                    _, _, step_status, _ = step
+                    if step_status == "success":
+                        line.append("●", style="green")
+                    elif step_status == "error":
+                        line.append("●", style="red")
+                    else:
+                        line.append("○", style="dim")
+
+        return line
+
+    def on_progress(iteration: int, status: str, thought: str, action: str | None):
+        """Callback for agent progress updates."""
+        current_state["iteration"] = iteration
+        current_state["thought"] = thought
+        current_state["action"] = action or ""
+
+        # Handle parallel sub-agent mode
+        if status == "parallel":
+            current_state["status"] = "parallel"
+            # Parse subtask descriptions from action field
+            if action:
+                subtasks = [s.strip() for s in action.split(",")]
+                current_state["parallel_subtasks"] = subtasks
+            return
+
+        # Handle completion of parallel subtasks
+        if status in ("completed", "partial") and current_state["parallel_subtasks"]:
+            current_state["parallel_completed"] = len(
+                current_state["parallel_subtasks"]
+            )
+            return
+
+        # Handle steering status
+        if status == "steering":
+            current_state["status"] = "steering"
+            current_state["thought"] = thought
+            return
+
+        # Map status to display status
+        if status in ("thinking", "planning"):
+            # Check if last step was an error - show retry message
+            if current_state["last_error"]:
+                current_state["status"] = "retrying"
+                current_state["last_error"] = None  # Clear after showing
+            else:
+                current_state["status"] = "thinking"
+        elif status == "error":
+            current_state["last_error"] = True
+            current_state["status"] = "executing"  # Still show as executing
+        else:
+            current_state["status"] = "executing"
+
+        if status in ("success", "error") and action:
+            current_state["steps"].append(
+                (iteration, action, status, thought[:50] if thought else "")
+            )
+
+    async def on_confirm(command: str, reason: str, message: str) -> bool:
+        """Prompt user for confirmation on dangerous operations."""
+        from rich.prompt import Confirm
+
+        # Stop live display temporarily to show confirmation
+        width = _get_width()
+        inner_width = width - 8  # Account for "  ╭" and "╮" on edges
+        console.print()
+        console.print(f"  [red]╭{'─' * inner_width}╮[/red]")
+
+        # Header line with proper padding
+        header = "⚠ Confirmation Required"
+        header_padding = inner_width - len(header) - 2  # -2 for spaces around text
+        console.print(
+            f"  [red]│[/red] [bold red]{header}[/bold red]"
+            f"{' ' * header_padding}[red]│[/red]"
+        )
+        console.print(f"  [red]│[/red]{' ' * inner_width}[red]│[/red]")
+
+        # Wrap message lines with proper right border
+        for line in message.split("\n"):
+            # Truncate if too long
+            max_line_len = inner_width - 4  # -4 for "  " padding on each side
+            if len(line) > max_line_len:
+                line = line[: max_line_len - 3] + "..."
+            # Pad to align right border
+            line_padding = inner_width - len(line) - 4
+            console.print(
+                f"  [red]│[/red]  [dim]{line}[/dim]{' ' * line_padding}  [red]│[/red]"
+            )
+
+        console.print(f"  [red]╰{'─' * inner_width}╯[/red]")
+
+        try:
+            result = Confirm.ask("  [bold]Proceed?[/bold]", default=False)
+            # Show user's decision clearly
+            console.print()
+            if result:
+                console.print(
+                    "  [green]✓[/green] [bold green]Approved[/bold green] - "
+                    "Continuing with operation..."
+                )
+            else:
+                console.print(
+                    "  [red]✗[/red] [bold red]Denied[/bold red] - "
+                    "Operation cancelled by user"
+                )
+            console.print()
+            return result
+        except (KeyboardInterrupt, EOFError):
+            console.print()
+            console.print(
+                "  [red]✗[/red] [bold red]Cancelled[/bold red] - Operation interrupted"
+            )
+            console.print()
+            return False
+
+    try:
+        # Create steering queue for mid-task corrections
+        steering_queue = asyncio.Queue()
+
+        agent = ReActAgent(
+            sandbox=sandbox,
+            on_progress=on_progress,
+            on_confirm=on_confirm,
+            max_iterations=settings.max_agent_iterations,
+            conversation_history=conversation_history or [],
+            steering_queue=steering_queue,
+        )
+
+        start_time = time.time()
+
+        # Run agent with live display, suppressing stderr to prevent
+        # shell warnings from corrupting the spinner display
+        with (
+            suppress_stderr(),
+            Live(build_agent_display(), console=console, refresh_per_second=4) as live,
+        ):
+
+            async def run_with_display():
+                async def updater():
+                    while True:
+                        live.update(build_agent_display())
+                        await asyncio.sleep(0.2)
+
+                async def steering_listener():
+                    """Listen for user steering input while agent runs."""
+                    import sys
+                    
+                    if sys.platform == "win32":
+                        # Windows terminal cannot easily do non-blocking stdin reads 
+                        # without breaking `sys.stdin` for rich.Confirm.ask calls.
+                        # Mid-task steering is disabled on Windows.
+                        while True:
+                            await asyncio.sleep(1)
+                    else:
+                        import select
+                        while True:
+                            await asyncio.sleep(0.1)
+                            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                                try:
+                                    line = sys.stdin.readline().strip()
+                                    if line:
+                                        await steering_queue.put(line)
+                                        current_state["status"] = "steering"
+                                        current_state["thought"] = f"User: {line[:40]}..."
+                                except Exception:
+                                    pass
+
+                update_task = asyncio.create_task(updater())
+                steering_task = asyncio.create_task(steering_listener())
+                try:
+                    return await agent.run(user_input)
+                finally:
+                    update_task.cancel()
+                    steering_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await update_task
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await steering_task
+
+            state = asyncio.run(run_with_display())
+            live.update(build_agent_display())
+
+        elapsed = time.time() - start_time
+
+        # Show steps if enabled
+        if settings.show_steps and state.steps:
+            _show_execution_steps(state.steps)
+
+        # Get the response for history
+        response_text = None
+
+        # Show final result with appropriate status indicator
+        if state.status == "completed":
+            global _last_completed_state
+            if state.steps:
+                _last_completed_state = state
+            console.print(f"  [dim]✓ Done in {format_duration(elapsed)}[/dim]")
+            response_text = _show_agent_result(state, model)
+        elif state.status == "failed":
+            console.print(f"  [red]✗ Failed after {format_duration(elapsed)}[/red]")
+            console.print()
+            console.print(f"  [red]╭{'─' * 50}╮[/red]")
+            console.print(
+                "  [red]│[/red] [bold red]Something went wrong[/bold red]"
+                + " " * 27
+                + "[red]│[/red]"
+            )
+            console.print(f"  [red]│[/red]{' ' * 50}[red]│[/red]")
+            error_msg = state.error or "Unknown error"
+            # Truncate long errors
+            if len(error_msg) > 46:
+                error_msg = error_msg[:43] + "..."
+            padding = 48 - len(error_msg)
+            console.print(
+                f"  [red]│[/red] [dim]{error_msg}[/dim]"
+                + " " * padding
+                + "[red]│[/red]"
+            )
+            console.print(f"  [red]│[/red]{' ' * 50}[red]│[/red]")
+            console.print(
+                "  [red]│[/red] [dim]Please try again or rephrase your request[/dim]"
+                + " " * 5
+                + "[red]│[/red]"
+            )
+            console.print(f"  [red]╰{'─' * 50}╯[/red]")
+            console.print()
+            response_text = f"Failed: {state.error}"
+        elif state.status == "max_iterations":
+            console.print(
+                f"  [yellow]⚠ Stopped after {format_duration(elapsed)}[/yellow]"
+            )
+            console.print()
+            console.print(f"  [yellow]╭{'─' * 50}╮[/yellow]")
+            console.print(
+                "  [yellow]│[/yellow] [bold yellow]Could not complete the task[/bold yellow]"
+                + " " * 20
+                + "[yellow]│[/yellow]"
+            )
+            console.print(f"  [yellow]│[/yellow]{' ' * 50}[yellow]│[/yellow]")
+            console.print(
+                "  [yellow]│[/yellow] [dim]Reached maximum attempts without success.[/dim]"
+                + " " * 5
+                + "[yellow]│[/yellow]"
+            )
+            console.print(
+                "  [yellow]│[/yellow] [dim]Try breaking down your request into[/dim]"
+                + " " * 10
+                + "[yellow]│[/yellow]"
+            )
+            console.print(
+                "  [yellow]│[/yellow] [dim]smaller, more specific tasks.[/dim]"
+                + " " * 17
+                + "[yellow]│[/yellow]"
+            )
+            console.print(f"  [yellow]╰{'─' * 50}╯[/yellow]")
+            console.print()
+            if state.steps:
+                # Show what was accomplished
+                response_text = _show_agent_result(state, model)
+
+        return response_text
+
+    except LLMError as e:
+        print_error("AI Error", str(e))
+        console.print()  # Padding after error
+        return None
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        print_error("Error", str(e))
+        console.print()  # Padding after error
+        return None
+
+
+def _show_execution_steps(steps: list):
+    """Display detailed execution steps after task completion."""
+    console.print()
+    console.print("  [bold dim]Steps executed:[/bold dim]")
+
+    for i, step in enumerate(steps, 1):
+        thought = step.thought
+        action = step.action
+
+        # Determine status icon
+        if step.result and step.result.status == "success":
+            icon = "[green]✓[/green]"
+        elif step.result and step.result.status == "error":
+            icon = "[red]✗[/red]"
+        else:
+            icon = "[dim]○[/dim]"
+
+        # Format thought (truncate if too long)
+        thought_preview = (
+            thought.reasoning[:60] if thought and thought.reasoning else ""
+        )
+        if thought and thought.reasoning and len(thought.reasoning) > 60:
+            thought_preview += "..."
+
+        # Format action
+        action_str = ""
+        if action:
+            if action.tool == "shell":
+                cmd = action.args.get("command", "")[:40]
+                if len(action.args.get("command", "")) > 40:
+                    cmd += "..."
+                action_str = f"[cyan]$ {cmd}[/cyan]"
+            elif action.tool == "python":
+                code_preview = action.args.get("code", "")[:30].replace("\n", " ")
+                if len(action.args.get("code", "")) > 30:
+                    code_preview += "..."
+                action_str = f"[yellow]▸ {code_preview}[/yellow]"
+            elif action.tool == "web_search":
+                query = action.args.get("query", "")[:30]
+                action_str = f"[blue]🔍 {query}[/blue]"
+            elif action.tool == "done":
+                action_str = "[green]✓ Done[/green]"
+            else:
+                action_str = f"[dim]{action.tool}[/dim]"
+
+        console.print(f"    {icon} [dim]Step {i}:[/dim] {thought_preview}")
+        if action_str:
+            console.print(f"       {action_str}")
+
+    console.print()
+
+
+def _show_agent_result(state, model: str) -> str:
+    """Display the agent's final result with context.
+
+    Returns the summary text for conversation history.
+    """
+    from agent.llm.client import call_llm
+
+    # Build summary from agent's work
+    if state.final_answer:
+        summary = state.final_answer
+    else:
+        # Generate summary from context
+        context_summary = "\n".join(
+            [
+                f"- {k}: {str(v)[:100]}..." if len(str(v)) > 100 else f"- {k}: {v}"
+                for k, v in list(state.context.items())[:10]
+            ]
+        )
+
+        prompt = f"""Summarize what was accomplished for this goal in 1-3 friendly sentences.
+
+Goal: {state.goal}
+
+Data gathered:
+{context_summary}
+
+Steps taken: {len(state.steps)}
+Final status: {state.status}
+
+Be concise and conversational. Focus on what was achieved."""
+
+        summary = call_llm(prompt)
+
+    _show_response(summary, model)
+
+    return summary
+
+
+def _show_response(text: str, model: str):
+    """Display agent response with clean formatting."""
+    from rich.markdown import Markdown
+
+    console.print()
+    console.print("  [bold cyan]◆[/bold cyan] [bold white]AutoHost[/bold white]")
+    console.print()
+    
+    # Use rich Markdown for beautiful rendering
+    md = Markdown(text)
+    # Print with an indent by wrapping in a simple padding or just printing directly
+    # To keep the indentation we had before, we can use a Pad or just print
+    from rich.padding import Padding
+    console.print(Padding(md, (0, 0, 0, 4)))
+
+    # Add trailing padding for visual separation
+    print_padding(1)
+
+
+def _show_welcome(model: str):
+    """Show welcome screen - compact with ASCII art."""
+    width = _get_width()
+
+    console.print()
+    console.print(
+        f"  [bold cyan]██╗[/bold cyan]  [bold white]AutoHost[/bold white] [dim]v{__version__}[/dim]  [green]●[/green] [dim]{model}[/dim]"
+    )
+    console.print(
+        "  [bold cyan]███████╗[/bold cyan]  [dim]Type a request or /help[/dim]"
+    )
+    console.print("  [bright_black]" + "─" * (width - 6) + "[/bright_black]")
+    # Bottom margin to keep content away from terminal edge
+    print_padding(1)
+
+
+def _get_input() -> str:
+    """Get user input with complete blue rectangle box.
+
+    Shows the full box (top, sides, bottom) before typing,
+    with cursor positioned inside. For long text, the box
+    expands to show multiple lines.
+    """
+    width = _get_width()
+    inner_width = width - 8
+    max_input_len = inner_width - 5  # Space for "│ > " and " │"
+
+    try:
+        # Print initial box with prompt
+        console.print(f"  [blue]╭{'─' * inner_width}╮[/blue]")
+        console.print(
+            f"  [blue]│[/blue] [dim]>[/dim] {' ' * (inner_width - 5)}[blue]│[/blue]"
+        )
+        console.print(f"  [blue]╰{'─' * inner_width}╯[/blue]")
+
+        # Print empty lines BELOW the box to create scroll buffer
+        console.print()
+        console.print()
+
+        # Move cursor up 4 lines (2 empty + bottom border + to middle line)
+        # Then right to input position (past "  │ > ")
+        sys.stdout.write("\033[4A\033[7C")
+        sys.stdout.flush()
+
+        # Get input
+        user_input = input()
+
+        # After input, redraw the box with the full text properly wrapped
+        if len(user_input) > max_input_len:
+            # Move back up and clear the old box
+            # Go up 1 line (we're on middle), clear from here down
+            sys.stdout.write("\033[1A")  # Up to top border
+            sys.stdout.write("\033[J")  # Clear from cursor to end of screen
+            sys.stdout.flush()
+
+            # Redraw box with wrapped text
+            console.print(f"  [blue]╭{'─' * inner_width}╮[/blue]")
+
+            # Split input into lines that fit
+            remaining = user_input
+            first_line = True
+            while remaining:
+                chunk = remaining[:max_input_len]
+                remaining = remaining[max_input_len:]
+                padding = max_input_len - len(chunk)
+
+                if first_line:
+                    console.print(
+                        f"  [blue]│[/blue] [dim]>[/dim] {chunk}"
+                        f"{' ' * padding} [blue]│[/blue]"
+                    )
+                    first_line = False
+                else:
+                    console.print(
+                        f"  [blue]│[/blue]   {chunk}{' ' * padding} [blue]│[/blue]"
+                    )
+
+            console.print(f"  [blue]╰{'─' * inner_width}╯[/blue]")
+            console.print()
+            console.print()
+        else:
+            # Short input - just move cursor down past the box
+            sys.stdout.write("\033[4B\r")
+            sys.stdout.flush()
+
+        return user_input.strip()
+    except (KeyboardInterrupt, EOFError):
+        # Clean up cursor position on interrupt
+        sys.stdout.write("\033[4B\r")
+        sys.stdout.flush()
+        console.print()
+        raise
+
+
+def _show_help():
+    """Show compact help."""
+    console.print()
+    console.print(
+        "  [bold]Examples:[/bold] [dim]list files in home[/dim] · [dim]find python files > 1MB[/dim] · [dim]analyze this CSV[/dim]"
+    )
+    console.print(
+        "  [bold]Commands:[/bold] [cyan]/clear[/cyan] [cyan]/status[/cyan] [cyan]/history[/cyan] [cyan]/macro[/cyan] [cyan]/model X[/cyan] [cyan]/remember[/cyan] [cyan]/recall[/cyan] [cyan]/help[/cyan] [cyan]/quit[/cyan]"
+    )
+    console.print(
+        "  [bold]Memory:[/bold]   [dim]/remember <text>[/dim] to save · [dim]/recall <query>[/dim] to search"
+    )
+    print_padding(1)
+
+
+def _show_status(model: str):
+    """Show current status and settings."""
+    import os
+
+    console.print()
+    console.print("  [bold cyan]◆[/bold cyan] [bold white]Status[/bold white]")
+    console.print()
+    console.print(f"    [dim]Version:[/dim]     [white]{__version__}[/white]")
+    console.print(f"    [dim]Model:[/dim]       [cyan]{model}[/cyan]")
+    console.print(f"    [dim]Working Dir:[/dim] [white]{os.getcwd()}[/white]")
+    console.print(
+        f"    [dim]Max Steps:[/dim]   [white]{settings.max_agent_iterations}[/white]"
+    )
+    console.print(f"    [dim]Ollama URL:[/dim]  [white]{settings.ollama_url}[/white]")
+    print_padding(1)
+
+
+def _show_history(conversation_history: list):
+    """Show conversation history."""
+    console.print()
+    console.print(
+        "  [bold cyan]◆[/bold cyan] [bold white]Conversation History[/bold white]"
+    )
+    console.print()
+
+    if not conversation_history:
+        console.print("    [dim]No conversation history yet.[/dim]")
+        console.print()
+        return
+
+    width = _get_width()
+
+    for _i, msg in enumerate(conversation_history):
+        role = msg["role"]
+        content = msg["content"]
+
+        # Truncate long messages
+        if len(content) > width - 20:
+            content = content[: width - 23] + "..."
+
+        if role == "user":
+            console.print(f"    [bold green]You:[/bold green] {content}")
+        else:
+            console.print(f"    [bold cyan]AI:[/bold cyan] {content}")
+
+    console.print()
+
+def _save_macro(name: str):
+    import json
+    from pathlib import Path
+    global _last_completed_state
+    
+    if not _last_completed_state:
+        console.print("  [red]No previously successful actions to save as a macro.[/red]")
+        return
+        
+    macro_dir = Path("~/.autohost/macros").expanduser()
+    macro_dir.mkdir(parents=True, exist_ok=True)
+    
+    actions = []
+    for step in _last_completed_state.steps:
+        if step.action and step.action.tool != "done" and step.result and step.result.status == "success":
+            actions.append({
+                "tool": step.action.tool,
+                "args": step.action.args,
+                "description": step.action.description
+            })
+            
+    if not actions:
+        console.print("  [red]No tool actions found in the last run to save.[/red]")
+        return
+        
+    macro_file = macro_dir / f"{name}.json"
+    with open(macro_file, "w") as f:
+        json.dump({"description": _last_completed_state.goal, "actions": actions}, f, indent=2)
+        
+    console.print(f"  [green]✓[/green] Saved macro '[bold cyan]{name}[/bold cyan]' with {len(actions)} steps.")
+
+def _list_macros():
+    from pathlib import Path
+    import json
+    macro_dir = Path("~/.autohost/macros").expanduser()
+    if not macro_dir.exists():
+        console.print("  [dim]No macros saved yet.[/dim]")
+        return
+        
+    macros = list(macro_dir.glob("*.json"))
+    if not macros:
+        console.print("  [dim]No macros saved yet.[/dim]")
+        return
+        
+    console.print("\n  [bold cyan]◆[/bold cyan] [bold white]Saved Macros[/bold white]\n")
+    for macro in macros:
+        with open(macro, "r") as f:
+            data = json.load(f)
+        desc = data.get("description", "No description")
+        count = len(data.get("actions", []))
+        console.print(f"    [cyan]{macro.stem}[/cyan] [dim]({count} steps) - {desc[:50]}[/dim]")
+    print_padding(1)
+
+def _run_macro(name: str):
+    import json
+    import asyncio
+    from pathlib import Path
+    from agent.orchestrator.deps import get_sandbox
+    from agent.orchestrator.react_agent import ReActAgent
+    from agent.orchestrator.agent_models import Action
+    
+    macro_dir = Path("~/.autohost/macros").expanduser()
+    macro_file = macro_dir / f"{name}.json"
+    
+    if not macro_file.exists():
+        console.print(f"  [red]Macro '{name}' not found. Use /macro list to see available macros.[/red]")
+        return
+        
+    with open(macro_file, "r") as f:
+        data = json.load(f)
+        
+    actions = data.get("actions", [])
+    if not actions:
+        console.print(f"  [red]Macro '{name}' is empty.[/red]")
+        return
+        
+    console.print(f"\n  [bold cyan]⚡ Running Macro:[/bold cyan] {name} [dim]({len(actions)} steps)[/dim]\n")
+    
+    sandbox = get_sandbox()
+    agent = ReActAgent(sandbox, require_confirmation=False)
+    
+    async def run_steps():
+        context = {}
+        for i, act_dict in enumerate(actions, 1):
+            action = Action(**act_dict)
+            cmd_preview = str(action.args.get("command", action.args.get("code", str(action.args))))[:50].replace("\\n", " ")
+            console.print(f"    [dim]Step {i}:[/dim] [cyan]{action.tool}[/cyan] [dim]▸ {cmd_preview}[/dim]")
+            
+            result = await agent._execute_action(action, context)
+            if result.status == "success":
+                console.print("      [green]✓ Success[/green]")
+                key = agent._make_context_key(action, i)
+                context[key] = result.output
+            else:
+                console.print(f"      [red]✗ Failed: {result.error}[/red]")
+                break
+        console.print(f"\n  [dim]✓ Macro execution finished.[/dim]")
+        print_padding(1)
+        
+    asyncio.run(run_steps())
+    console.print(f"    [dim]{len(conversation_history)} messages in history[/dim]")
+    print_padding(1)
+
+
+def _show_goodbye():
+    """Show a clean goodbye message."""
+    console.print()
+    console.print("  [dim]Session ended. Goodbye![/dim]")
+    print_padding(1)
