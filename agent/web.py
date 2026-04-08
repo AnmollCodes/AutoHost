@@ -6,7 +6,7 @@ without requiring browser automation.
 
 from typing import Any
 
-import requests
+import requests  # type: ignore[import-untyped]
 import structlog
 from bs4 import BeautifulSoup
 from ddgs import DDGS
@@ -199,7 +199,8 @@ def crawl_internal(start_url: str, max_pages: int = 3) -> dict[str, Any]:
                 content_parts.append(page_text)
                 
                 for a in soup.find_all('a', href=True):
-                    next_url = urljoin(url, a['href'])
+                    href_val = a['href']
+                    next_url = urljoin(url, str(href_val[0] if isinstance(href_val, list) else href_val))
                     if urlparse(next_url).netloc == domain and next_url not in visited and next_url not in to_visit:
                         if not any(next_url.endswith(ext) for ext in ['.png', '.jpg', '.pdf', '.zip']):
                             to_visit.append(next_url)

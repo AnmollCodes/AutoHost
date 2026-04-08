@@ -253,16 +253,16 @@ class DatabaseManager:
 
             # Update fields
             if state is not None:
-                task.state = state
+                task.state = state  # type: ignore[assignment]
             if output is not None:
-                task.output = output
+                task.output = output  # type: ignore[assignment]
             if error is not None:
-                task.error = error
+                task.error = error  # type: ignore[assignment]
 
-            task.updated_at = datetime.utcnow()
+            task.updated_at = datetime.utcnow()  # type: ignore[assignment]
 
             if state == "completed" or state == "failed":
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.utcnow()  # type: ignore[assignment]
 
             db.commit()
             db.refresh(task)

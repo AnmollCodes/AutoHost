@@ -57,7 +57,7 @@ def _get_width() -> int:
     return min(shutil.get_terminal_size().columns - 4, 100)
 
 
-def run_agent(model_override: str = None):
+def run_agent(model_override: str | None = None):
     """Main agent loop - handles everything autonomously."""
     from agent.config import settings as app_settings
     from agent.llm.client import check_ollama_health
@@ -207,7 +207,7 @@ def _interactive_loop(model: str):
 
 
 def _process_input_agentic(
-    user_input: str, model: str, conversation_history: list = None
+    user_input: str, model: str, conversation_history: list | None = None
 ) -> str | None:
     """Process input using the ReAct agentic loop.
 

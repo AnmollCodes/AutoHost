@@ -615,7 +615,7 @@ async def call_llm_stream_async(
 
 
 async def call_llm_chat_stream_async(
-    messages: list[dict[str, str]], model: str = None
+    messages: list[dict[str, str]], model: str | None = None
 ) -> AsyncIterator[str]:
     """
     Async streaming chat. Yields tokens as they arrive from the model.
@@ -658,7 +658,7 @@ async def call_llm_chat_stream_async(
         raise LLMError(f"Async chat stream request failed: {e}")
 
 
-def call_llm_chat_stream(messages: list[dict[str, str]], model: str = None):
+def call_llm_chat_stream(messages: list[dict[str, str]], model: str | None = None):
     """
     Stream chat responses from Ollama.
 

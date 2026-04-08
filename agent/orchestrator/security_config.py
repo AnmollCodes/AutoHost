@@ -167,7 +167,11 @@ class PromptSanitizationMiddleware(BaseHTTPMiddleware):
                 from io import BytesIO
 
                 request._body = json.dumps(data).encode()
-                request._receive = lambda: {"type": "http.disconnect"}
+                
+                async def disconnect_receive():
+                    return {"type": "http.disconnect"}
+                
+                request._receive = disconnect_receive
 
                 # Create new receive callable
                 async def receive():

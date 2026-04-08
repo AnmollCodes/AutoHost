@@ -1058,10 +1058,10 @@ class ReActAgent:
                 path = os.path.expanduser(path) if path else os.path.expanduser("~")
                 
                 try:
-                    result = analyze_codebase(path)
-                    if result.startswith("Error:"):
-                        return StepResult(step_id="codebase_analyzer", status="error", error=result)
-                    return StepResult(step_id="codebase_analyzer", status="success", output=result)
+                    analysis_result = analyze_codebase(path)
+                    if analysis_result.startswith("Error:"):
+                        return StepResult(step_id="codebase_analyzer", status="error", error=analysis_result)
+                    return StepResult(step_id="codebase_analyzer", status="success", output=analysis_result)
                 except Exception as e:
                     return StepResult(step_id="codebase_analyzer", status="error", error=str(e))
 
